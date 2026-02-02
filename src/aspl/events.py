@@ -1,6 +1,6 @@
-import dataclasses
 from dataclasses import dataclass
 from enum import Enum, StrEnum
+from typing import Any, Literal
 
 class Strand(StrEnum):
     PLUS = "+"
@@ -40,7 +40,7 @@ class SpliceSite(PointCoordinate):
         return result
 
     @staticmethod
-    def parse(s: str, cs: CoordinateSystem, type_included: bool = False):
+    def parse(s: str, cs: CoordinateSystem = CoordinateSystem.ONE_BASED, type_included: bool = False):
         if type_included:
             seqname, coord, strand, site_type = s.rsplit("_", maxsplit=3)
             site_type = SpliceSiteType(site_type)
@@ -65,7 +65,7 @@ class SpliceJunction:
     def is_valid(self):
         result = True
         result &= (self.donor_site.type == SpliceSiteType.DONOR)
-        result &= (self.donor_site.type == SpliceSiteType.ACCEPTOR)
+        result &= (self.acceptor_site.type == SpliceSiteType.ACCEPTOR)
         result &= (self.donor_site.seqname == self.acceptor_site.seqname)
         result &= (self.donor_site.strand == self.acceptor_site.strand)
 
@@ -102,6 +102,41 @@ class SpliceJunction:
 
 
 @dataclass(frozen=True)
+class Exon:
+    siteB: SpliceSite
+    siteC: SpliceSite
+
+    def get_splice_sites(self):
+        return [self.siteB, self.siteC]
+
+    def is_valid(self) -> bool:
+        is_valid = True
+        is_valid &= (self.siteC.type == SpliceSiteType.DONOR)
+        is_valid &= (self.siteB.type == SpliceSiteType.ACCEPTOR)
+        is_valid &= (self.siteB.seqname == self.siteC.seqname)
+        is_valid &= (self.siteB.strand == self.siteC.strand)
+
+        if not is_valid:
+            return False
+
+        strand = self.siteB.strand
+
+        if strand == Strand.PLUS:
+            is_valid &= (self.siteB.coord < self.siteC.coord)
+        else:
+            is_valid &= (self.siteB.coord > self.siteC.coord)
+        return is_valid
+
+    def format(self):
+        assert self.is_valid()
+        coords = [str(s.coord) for s in self.get_splice_sites()]
+        if self.siteB.strand == Strand.MINUS:
+            coords = coords[::-1]
+        
+        return self.siteB.seqname + "_" + "_".join(coords) + "_" + self.siteB.strand        
+
+
+@dataclass(frozen=True)
 class CassetteExon:
     siteA: SpliceSite
     siteB: SpliceSite
@@ -110,6 +145,12 @@ class CassetteExon:
 
     def get_splice_sites(self):
         return [self.siteA, self.siteB, self.siteC, self.siteD]
+
+    def get_flanking_junctions(self):
+        return SpliceJunction(self.siteA, self.siteB), SpliceJunction(self.siteC, self.siteD)
+
+    def get_exon(self):
+        return Exon(self.siteB, self.siteC)
 
     def is_valid(self):
         is_valid = True
@@ -152,24 +193,3 @@ class CassetteExon:
         
         return self.siteA.seqname + "_" + "_".join(coords) + "_" + self.siteA.strand        
 
-
-@dataclass
-class SiteMapper:
-    mapping: dict[SpliceSite, SpliceSite] # all splice sites in the dictionary have to be untyped
-
-    def map_splice_site(self, ss: SpliceSite):
-        return dataclasses.replace(self.mapping[dataclasses.replace(ss, type=SpliceSiteType.UNKNOWN)], type=ss.type)
-
-    def map_junction(self, sj: SpliceJunction):
-        return SpliceJunction(
-            self.map_splice_site(sj.donor_site),
-            self.map_splice_site(sj.acceptor_site)
-        )
-
-    def map_cassette_exon(self, ce: CassetteExon):
-        return CassetteExon(
-            self.map_splice_site(ce.siteA),
-            self.map_splice_site(ce.siteB),
-            self.map_splice_site(ce.siteC),
-            self.map_splice_site(ce.siteD)
-        )
