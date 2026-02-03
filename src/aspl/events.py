@@ -27,6 +27,15 @@ class PointCoordinate:
     strand: Strand
 
 
+# 0-based, right-half-open BED-like coordinates internally
+@dataclass(frozen=True)
+class IntervalCoordinate:
+    seqname: str
+    seqStart: int
+    seqEnd: int
+    strand: Strand | None
+
+
 # may be 0-based
 @dataclass(frozen=True)
 class SpliceSite(PointCoordinate):
@@ -119,6 +128,16 @@ class SpliceJunction:
             + self.donor_site.strand
         )
 
+    def get_interval(self):
+        assert self.is_valid()
+        coords = [s.coord for s in (self.donor_site, self.acceptor_site)]
+        if self.donor_site.strand == Strand.MINUS:
+            coords = coords[::-1]
+
+        return IntervalCoordinate(
+            self.donor_site.seqname, coords[0], coords[1] - 1, self.donor_site.strand
+        )
+
 
 @dataclass(frozen=True)
 class Exon:
@@ -153,6 +172,16 @@ class Exon:
             coords = coords[::-1]
 
         return self.siteB.seqname + "_" + "_".join(coords) + "_" + self.siteB.strand
+
+    def get_interval(self):
+        assert self.is_valid()
+        coords = [s.coord for s in self.get_splice_sites()]
+        if self.siteB.strand == Strand.MINUS:
+            coords = coords[::-1]
+
+        return IntervalCoordinate(
+            self.siteB.seqname, coords[0] - 1, coords[1], self.siteB.strand
+        )
 
 
 @dataclass(frozen=True)
