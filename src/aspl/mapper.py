@@ -8,6 +8,7 @@ from .events import (
     CoordinateSystem,
     Exon,
 )
+from .formatters import UnderscoreSeparated
 
 
 @dataclasses.dataclass
@@ -44,9 +45,10 @@ class SiteMapper:
     # parse the zero-based mapping table built by maptools
     @staticmethod
     def parse_site_file(dfm1: pl.DataFrame):
+        formatter = UnderscoreSeparated(CoordinateSystem.ZERO_BASED)
         m1_dict = {}
         for r in dfm1.iter_rows(named=True):
-            s1 = SpliceSite.parse(r["S1"], CoordinateSystem.ZERO_BASED)
-            s2 = SpliceSite.parse(r["S2"], CoordinateSystem.ZERO_BASED)
+            s1 = formatter.parse(r["S1"], SpliceSite)
+            s2 = formatter.parse(r["S2"], SpliceSite)
             m1_dict[s1] = s2
         return SiteMapper(m1_dict)

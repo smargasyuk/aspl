@@ -7,10 +7,11 @@ from aspl.events import (
     Strand,
     SpliceSiteType,
 )
+from aspl import formatters
 
 import pytest
 
-ce1 = CassetteExon.parse("chr1_10_20_30_40_-")
+ce1 = formatters.UnderscoreSeparated().parse("chr1_10_20_30_40_-", CassetteExon)
 jxn1 = SpliceJunction(ce1.siteA, ce1.siteB)
 
 
@@ -26,7 +27,7 @@ ce_test_data = [
         False,
     ),  # different chromosomes
     (
-        dt.replace(ce1, siteB=dt.replace(ce1.siteC, type=SpliceSiteType.ACCEPTOR)),
+        dt.replace(ce1, siteB=dt.replace(ce1.siteB, type=SpliceSiteType.DONOR)),
         False,
     ),  # wrong site type
 ]

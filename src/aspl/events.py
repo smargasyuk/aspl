@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum, StrEnum
-from typing import Any, Literal
+from typing import ClassVar, override
+from abc import ABC, abstractmethod
 
 
 class Strand(StrEnum):
@@ -36,103 +37,69 @@ class IntervalCoordinate:
     strand: Strand | None
 
 
-# may be 0-based
 @dataclass(frozen=True)
 class SpliceSite(PointCoordinate):
     type: SpliceSiteType
 
-    def format(
-        self,
-        cs: CoordinateSystem = CoordinateSystem.ONE_BASED,
-        include_type: bool = False,
-    ):
-        coord = self.coord - 1 if cs == CoordinateSystem.ZERO_BASED else self.coord
-        result = self.seqname + "_" + str(coord) + "_" + self.strand
+    @property
+    def splice_sites(self):
+        return [self]
 
-        if include_type:
-            result += "_" + self.type
-
-        return result
-
-    @staticmethod
-    def parse(
-        s: str,
-        cs: CoordinateSystem = CoordinateSystem.ONE_BASED,
-        type_included: bool = False,
-    ):
-        if type_included:
-            seqname, coord, strand, site_type = s.rsplit("_", maxsplit=3)
-            site_type = SpliceSiteType(site_type)
-        else:
-            seqname, coord, strand = s.rsplit("_", maxsplit=2)
-            site_type = SpliceSiteType.UNKNOWN
-
-        coord = int(coord)
-        if cs == CoordinateSystem.ZERO_BASED:
-            coord += 1
-
-        strand = Strand(strand)
-
-        return SpliceSite(seqname, coord, strand, site_type)
-
-
-# always 1-based as of now
-@dataclass(frozen=True)
-class SpliceJunction:
-    donor_site: SpliceSite
-    acceptor_site: SpliceSite
+    def get_sites_sorted_by_coordinate(self):
+        return [self]
 
     def is_valid(self):
+        return True
+
+
+class SplicingSubPath(ABC):
+    splice_site_types: ClassVar[list[SpliceSiteType]] = []
+
+    @property
+    @abstractmethod
+    def splice_sites(self) -> list[SpliceSite]:
+        pass
+
+    def is_valid(self) -> bool:
         result = True
-        result &= self.donor_site.type == SpliceSiteType.DONOR
-        result &= self.acceptor_site.type == SpliceSiteType.ACCEPTOR
-        result &= self.donor_site.seqname == self.acceptor_site.seqname
-        result &= self.donor_site.strand == self.acceptor_site.strand
+        result &= len(self.splice_sites) == len(self.splice_site_types)
+        for ss, sst in zip(self.splice_sites, self.splice_site_types):
+            result &= ss.type == sst
+        result &= len(set(ss.seqname for ss in self.splice_sites)) == 1
+        result &= len(set(ss.strand for ss in self.splice_sites)) == 1
 
         if not result:
             return False
 
-        strand = self.donor_site.strand
-
-        if strand == Strand.PLUS:
-            result &= self.acceptor_site.coord > self.donor_site.coord
-        else:
-            result &= self.acceptor_site.coord < self.donor_site.coord
+        for s1, s2 in zip(self.splice_sites, self.splice_sites[1:]):
+            result &= (s1.coord < s2.coord) + (s1.strand == Strand.MINUS) == 1
         return result
 
-    @staticmethod
-    def parse(s: str):
-        seqname, coord1, coord2, strand = s.rsplit("_", maxsplit=3)
-        strand = Strand(strand)
-        coord1, coord2 = int(coord1), int(coord2)
-        if strand == Strand.MINUS:
-            coord2, coord1 = coord1, coord2
+    def get_sites_sorted_by_coordinate(self):
+        sites = self.splice_sites
+        if sites[0].strand == Strand.MINUS:
+            sites = sites[::-1]
+        return sites
 
-        return SpliceJunction(
-            SpliceSite(seqname, coord1, strand, SpliceSiteType.DONOR),
-            SpliceSite(seqname, coord2, strand, SpliceSiteType.ACCEPTOR),
-        )
 
-    def format(self):
-        assert self.is_valid()
-        coord1, coord2 = self.donor_site.coord, self.acceptor_site.coord
-        if self.donor_site.strand == Strand.MINUS:
-            coord2, coord1 = coord1, coord2
-        return (
-            self.donor_site.seqname
-            + "_"
-            + str(coord1)
-            + "_"
-            + str(coord2)
-            + "_"
-            + self.donor_site.strand
-        )
+# always 1-based as of now
+@dataclass(frozen=True)
+class SpliceJunction(SplicingSubPath):
+    donor_site: SpliceSite
+    acceptor_site: SpliceSite
+    splice_site_types: ClassVar[list[SpliceSiteType]] = [
+        SpliceSiteType.DONOR,
+        SpliceSiteType.ACCEPTOR,
+    ]
+
+    @property
+    @override
+    def splice_sites(self) -> list[SpliceSite]:
+        return [self.donor_site, self.acceptor_site]
 
     def get_interval(self):
         assert self.is_valid()
-        coords = [s.coord for s in (self.donor_site, self.acceptor_site)]
-        if self.donor_site.strand == Strand.MINUS:
-            coords = coords[::-1]
+        coords = [s.coord for s in self.get_sites_sorted_by_coordinate()]
 
         return IntervalCoordinate(
             self.donor_site.seqname, coords[0], coords[1] - 1, self.donor_site.strand
@@ -140,44 +107,23 @@ class SpliceJunction:
 
 
 @dataclass(frozen=True)
-class Exon:
+class Exon(SplicingSubPath):
     siteB: SpliceSite
     siteC: SpliceSite
+    splice_site_types: ClassVar[list[SpliceSiteType]] = [
+        SpliceSiteType.ACCEPTOR,
+        SpliceSiteType.DONOR,
+    ]
 
-    def get_splice_sites(self):
+    @property
+    @override
+    def splice_sites(self) -> list[SpliceSite]:
         return [self.siteB, self.siteC]
 
-    def is_valid(self) -> bool:
-        is_valid = True
-        is_valid &= self.siteC.type == SpliceSiteType.DONOR
-        is_valid &= self.siteB.type == SpliceSiteType.ACCEPTOR
-        is_valid &= self.siteB.seqname == self.siteC.seqname
-        is_valid &= self.siteB.strand == self.siteC.strand
-
-        if not is_valid:
-            return False
-
-        strand = self.siteB.strand
-
-        if strand == Strand.PLUS:
-            is_valid &= self.siteB.coord < self.siteC.coord
-        else:
-            is_valid &= self.siteB.coord > self.siteC.coord
-        return is_valid
-
-    def format(self):
-        assert self.is_valid()
-        coords = [str(s.coord) for s in self.get_splice_sites()]
-        if self.siteB.strand == Strand.MINUS:
-            coords = coords[::-1]
-
-        return self.siteB.seqname + "_" + "_".join(coords) + "_" + self.siteB.strand
 
     def get_interval(self):
         assert self.is_valid()
-        coords = [s.coord for s in self.get_splice_sites()]
-        if self.siteB.strand == Strand.MINUS:
-            coords = coords[::-1]
+        coords = [s.coord for s in self.get_sites_sorted_by_coordinate()]
 
         return IntervalCoordinate(
             self.siteB.seqname, coords[0] - 1, coords[1], self.siteB.strand
@@ -185,13 +131,21 @@ class Exon:
 
 
 @dataclass(frozen=True)
-class CassetteExon:
+class CassetteExon(SplicingSubPath):
     siteA: SpliceSite
     siteB: SpliceSite
     siteC: SpliceSite
     siteD: SpliceSite
+    splice_site_types: ClassVar[list[SpliceSiteType]] = [
+        SpliceSiteType.DONOR,
+        SpliceSiteType.ACCEPTOR,
+        SpliceSiteType.DONOR,
+        SpliceSiteType.ACCEPTOR,
+    ]
 
-    def get_splice_sites(self):
+    @property
+    @override
+    def splice_sites(self) -> list[SpliceSite]:
         return [self.siteA, self.siteB, self.siteC, self.siteD]
 
     def get_flanking_junctions(self):
@@ -201,64 +155,3 @@ class CassetteExon:
 
     def get_exon(self):
         return Exon(self.siteB, self.siteC)
-
-    def is_valid(self):
-        is_valid = True
-        is_valid &= self.siteA.type == self.siteC.type == SpliceSiteType.DONOR
-        is_valid &= self.siteB.type == self.siteD.type == SpliceSiteType.ACCEPTOR
-        is_valid &= (
-            self.siteA.seqname
-            == self.siteB.seqname
-            == self.siteC.seqname
-            == self.siteD.seqname
-        )
-        is_valid &= (
-            self.siteA.strand
-            == self.siteB.strand
-            == self.siteC.strand
-            == self.siteD.strand
-        )
-
-        if not is_valid:
-            return False
-
-        strand = self.siteA.strand
-
-        if strand == Strand.PLUS:
-            is_valid &= (
-                self.siteA.coord
-                < self.siteB.coord
-                < self.siteC.coord
-                < self.siteD.coord
-            )
-        else:
-            is_valid &= (
-                self.siteA.coord
-                > self.siteB.coord
-                > self.siteC.coord
-                > self.siteD.coord
-            )
-        return is_valid
-
-    @staticmethod
-    def parse(s: str):
-        seqname, *coords, strand = s.rsplit("_", maxsplit=5)
-        strand = Strand(strand)
-        coords = [int(c) for c in coords]
-        if strand == Strand.MINUS:
-            coords = coords[::-1]
-
-        return CassetteExon(
-            SpliceSite(seqname, coords[0], strand, SpliceSiteType.DONOR),
-            SpliceSite(seqname, coords[1], strand, SpliceSiteType.ACCEPTOR),
-            SpliceSite(seqname, coords[2], strand, SpliceSiteType.DONOR),
-            SpliceSite(seqname, coords[3], strand, SpliceSiteType.ACCEPTOR),
-        )
-
-    def format(self):
-        assert self.is_valid()
-        coords = [str(s.coord) for s in self.get_splice_sites()]
-        if self.siteA.strand == Strand.MINUS:
-            coords = coords[::-1]
-
-        return self.siteA.seqname + "_" + "_".join(coords) + "_" + self.siteA.strand
