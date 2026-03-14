@@ -83,8 +83,89 @@ class UnderscoreSeparated:
                 output = SpliceSite(seqname, coord, strand, site_type)
                 return cast(T, output)
 
-            case t if t is CassetteExon:
-                raise NotImplementedError("Parsing of exons is not implemented yet")
+            case t if t is Exon:
+                # raise NotImplementedError("Parsing of exons is not implemented yet")
+                seqname, coord1, coord2, strand = input.rsplit("_", maxsplit=3)
+                strand = Strand(strand)
+                coord1, coord2 = int(coord1), int(coord2)
+                if strand == Strand.MINUS:
+                    coord2, coord1 = coord1, coord2
+
+                output = Exon(
+                    SpliceSite(seqname, coord1, strand, SpliceSiteType.ACCEPTOR),
+                    SpliceSite(seqname, coord2, strand, SpliceSiteType.DONOR),
+                )
+
+                return cast(T, output)
 
             case _:
                 raise TypeError(f"Unsupported type: {target_type}")
+
+
+@dataclass
+class Bed12Formatter:
+    intron_flanks_lenght: int = 3
+    BED12TEMPLATE = "{chrom}\t{chromStart}\t{chromEnd}\t{name}\t{score}\t{strand}\t{thickStart}\t{thickEnd}\t{itemRgb}\t{blockCount}\t{blockSizes}\t{blockStarts}"
+    name_formatter = UnderscoreSeparated()
+
+
+    def format(self, value: CassetteExon | SpliceJunction | SpliceSite | Exon, name: str = None, color: str = "0,0,0") -> str:
+        match value:
+            case CassetteExon():
+                name = name if name is not None else self.name_formatter.format(value)
+                sites = value.get_sites_sorted_by_coordinate()
+                start_coord = sites[0].coord - self.intron_flanks_lenght
+                end_coord = sites[-1].coord + self.intron_flanks_lenght - 1
+                return self.BED12TEMPLATE.format(
+                    chrom = sites[0].seqname,
+                    chromStart=start_coord,
+                    chromEnd=end_coord,
+                    name=name,
+                    score="0",
+                    strand=sites[0].strand,
+                    thickStart=start_coord,
+                    thickEnd=end_coord,
+                    itemRgb=color,
+                    blockCount=3,
+                    blockSizes=f"{self.intron_flanks_lenght},{sites[2].coord - sites[1].coord + 1},{self.intron_flanks_lenght}",
+                    blockStarts=f"0,{sites[1].coord - sites[0].coord + self.intron_flanks_lenght - 1},{sites[3].coord - sites[0].coord + self.intron_flanks_lenght - 1}"
+                )
+            case SpliceJunction():
+                name = name if name is not None else self.name_formatter.format(value)
+                sites = value.get_sites_sorted_by_coordinate()
+                start_coord = sites[0].coord - self.intron_flanks_lenght
+                end_coord = sites[-1].coord + self.intron_flanks_lenght - 1
+                return self.BED12TEMPLATE.format(
+                    chrom = sites[0].seqname,
+                    chromStart=start_coord,
+                    chromEnd=end_coord,
+                    name=name,
+                    score="0",
+                    strand=sites[0].strand,
+                    thickStart=start_coord,
+                    thickEnd=end_coord,
+                    itemRgb=color,
+                    blockCount=2,
+                    blockSizes=f"{self.intron_flanks_lenght},{self.intron_flanks_lenght}",
+                    blockStarts=f"0,{sites[-1].coord - sites[0].coord + self.intron_flanks_lenght - 1}"
+                )     
+            case SpliceSite():
+                name = name if name is not None else self.name_formatter.format(value)
+                start_coord = value.coord - 1
+                end_coord = value.coord
+                return self.BED12TEMPLATE.format(
+                    chrom = value.seqname,
+                    chromStart=start_coord,
+                    chromEnd=end_coord,
+                    name=name,
+                    score="0",
+                    strand=value.strand,
+                    thickStart=start_coord,
+                    thickEnd=end_coord,
+                    itemRgb=color,
+                    blockCount=1,
+                    blockSizes=f"1",
+                    blockStarts=f"0"
+                )                            
+            case _:
+                raise NotImplementedError
