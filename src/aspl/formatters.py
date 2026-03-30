@@ -1,7 +1,9 @@
 from .events import CassetteExon, SpliceJunction, SpliceSite, Exon
 from .events import Strand, CoordinateSystem, SpliceSiteType
+from .transcripts import Transcript
 from dataclasses import dataclass
 from typing import TypeVar, cast
+import itertools
 
 T = TypeVar("T", CassetteExon, SpliceJunction, SpliceSite, Exon)
 
@@ -11,17 +13,8 @@ class UnderscoreSeparated:
     coordinate_system: CoordinateSystem = CoordinateSystem.ONE_BASED
     include_site_type: bool = False
 
-    # def __get_number_of_splits(self, target_type: type[T]):
-    #     match target_type:
-    #         case t if t is CassetteExon:
-    #             return (5, 1, )
-    #         case t if t is SpliceJunction:
-    #             return (3)
-    #         case t if t is SpliceSite:
-    #             if self.include_site_type:
-    #                 return
 
-    def format(self, value: CassetteExon | SpliceJunction | SpliceSite | Exon) -> str:
+    def format(self, value: CassetteExon | SpliceJunction | SpliceSite | Exon | Transcript) -> str:
         assert value.is_valid()
         sites = value.get_sites_sorted_by_coordinate()
         coords = [site.coord for site in sites]
@@ -35,37 +28,10 @@ class UnderscoreSeparated:
             fields += [sites[0].type]
         return "_".join(fields)
 
+
+# seqname should not contain any underscores, needed for transcripts
     def parse(self, input: str, target_type: type[T]) -> T:
         match target_type:
-            case t if t is CassetteExon:
-                seqname, *coords, strand = input.rsplit("_", maxsplit=5)
-                strand = Strand(strand)
-                coords = [int(c) for c in coords]
-                if strand == Strand.MINUS:
-                    coords = coords[::-1]
-
-                output = CassetteExon(
-                    SpliceSite(seqname, coords[0], strand, SpliceSiteType.DONOR),
-                    SpliceSite(seqname, coords[1], strand, SpliceSiteType.ACCEPTOR),
-                    SpliceSite(seqname, coords[2], strand, SpliceSiteType.DONOR),
-                    SpliceSite(seqname, coords[3], strand, SpliceSiteType.ACCEPTOR),
-                )
-
-                return cast(T, output)
-
-            case t if t is SpliceJunction:
-                seqname, coord1, coord2, strand = input.rsplit("_", maxsplit=3)
-                strand = Strand(strand)
-                coord1, coord2 = int(coord1), int(coord2)
-                if strand == Strand.MINUS:
-                    coord2, coord1 = coord1, coord2
-
-                output = SpliceJunction(
-                    SpliceSite(seqname, coord1, strand, SpliceSiteType.DONOR),
-                    SpliceSite(seqname, coord2, strand, SpliceSiteType.ACCEPTOR),
-                )
-
-                return cast(T, output)
 
             case t if t is SpliceSite:
                 if self.include_site_type:
@@ -83,23 +49,25 @@ class UnderscoreSeparated:
                 output = SpliceSite(seqname, coord, strand, site_type)
                 return cast(T, output)
 
-            case t if t is Exon:
-                # raise NotImplementedError("Parsing of exons is not implemented yet")
-                seqname, coord1, coord2, strand = input.rsplit("_", maxsplit=3)
-                strand = Strand(strand)
-                coord1, coord2 = int(coord1), int(coord2)
+
+            case t:
+                fields = input.split('_')
+                strand = Strand(fields[-1])
+                seqname = fields[0]
+                coords = [int(f) for f in fields[1:-1]]
                 if strand == Strand.MINUS:
-                    coord2, coord1 = coord1, coord2
+                    coords = coords[::-1]
+                if t is Transcript:
+                    splice_site_types = itertools.cycle([SpliceSiteType.ACCEPTOR, SpliceSiteType.DONOR])
+                else:
+                    splice_site_types = t.splice_site_types
+                sites = [SpliceSite(seqname, coord, strand, sst) for coord, sst in zip(coords, splice_site_types)]
+                output =  t.from_splice_sites(sites)
+                return cast(T, output)  
 
-                output = Exon(
-                    SpliceSite(seqname, coord1, strand, SpliceSiteType.ACCEPTOR),
-                    SpliceSite(seqname, coord2, strand, SpliceSiteType.DONOR),
-                )
 
-                return cast(T, output)
-
-            case _:
-                raise TypeError(f"Unsupported type: {target_type}")
+            # case _:
+            #     raise TypeError(f"Unsupported type: {target_type}")
 
 
 @dataclass
@@ -166,6 +134,25 @@ class Bed12Formatter:
                     blockCount=1,
                     blockSizes=f"1",
                     blockStarts=f"0"
-                )                            
+                )
+            case Exon():
+                name = name if name is not None else self.name_formatter.format(value)
+                sites = value.get_sites_sorted_by_coordinate()
+                start_coord = sites[0].coord - 1
+                end_coord = sites[-1].coord
+                return self.BED12TEMPLATE.format(
+                    chrom = sites[0].seqname,
+                    chromStart=start_coord,
+                    chromEnd=end_coord,
+                    name=name,
+                    score="0",
+                    strand=sites[0].strand,
+                    thickStart=start_coord,
+                    thickEnd=end_coord,
+                    itemRgb=color,
+                    blockCount=1,
+                    blockSizes=f"{end_coord-start_coord}",
+                    blockStarts=f"0"
+                )                                           
             case _:
                 raise NotImplementedError

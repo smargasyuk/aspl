@@ -1,4 +1,5 @@
-from aspl.events import CassetteExon, SpliceJunction, SpliceSite, CoordinateSystem
+from aspl.events import CassetteExon, SpliceJunction, SpliceSite, CoordinateSystem, Exon
+from aspl.transcripts import Transcript
 from aspl.formatters import UnderscoreSeparated
 
 test_ce = "chr1_10_20_30_40_-"
@@ -39,3 +40,12 @@ def test_ce_site_relation():
     assert formatter.parse(test_ce, CassetteExon).siteA == formatter.parse(
         ss1, SpliceSite
     )
+
+def test_transcript():
+    t1 = 'chr7_127228465_127228619_127229137_127229217_127229539_127229648_127230120_127230191_127231017_127231142_127231267_127231754_-'
+    assert t1 == formatter.format(formatter.parse(t1, Transcript))
+
+
+def test_exon():
+    e1 = 'chr7_127228465_127228619_-'
+    assert e1 == formatter.format(formatter.parse(e1, Exon))
