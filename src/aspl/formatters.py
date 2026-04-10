@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TypeVar, cast
 import itertools
 
-T = TypeVar("T", CassetteExon, SpliceJunction, SpliceSite, Exon)
+T = TypeVar("T", CassetteExon, SpliceJunction, SpliceSite, Exon, Transcript)
 
 
 @dataclass

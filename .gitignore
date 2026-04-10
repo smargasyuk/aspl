@@ -1,5 +1,6 @@
 # Fasta index for a test file
 *.fai
+*.gzi
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
