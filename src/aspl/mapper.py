@@ -9,7 +9,8 @@ from .events import (
     CassetteExon,
     SpliceSiteType,
     CoordinateSystem,
-    Exon, Strand
+    Exon,
+    Strand,
 )
 from .transcripts import Transcript
 from .formatters import UnderscoreSeparated
@@ -28,7 +29,7 @@ class Mapper(ABC):
         if any(mss is None for mss in mapped_ss):
             return None
         cls = type(event)
-        mapped_event =  cls.from_splice_sites(mapped_ss)
+        mapped_event = cls.from_splice_sites(mapped_ss)
         if not mapped_event.is_valid():
             return None
         return mapped_event
@@ -79,7 +80,7 @@ class SiteTableMapper(Mapper):
 
 
 def _map_single_site_with_pyliftover(ss: SpliceSite, chain: ChainFile):
-    strand_inverted = {"+" : "-", "-": "+"}
+    strand_inverted = {"+": "-", "-": "+"}
     targets_list = chain[ss.seqname][ss.coord]
     if len(targets_list) != 1:
         return None
@@ -109,7 +110,6 @@ class PyLiftOverMapper(Mapper):
 class ReciprocalBestHitMapper(Mapper):
     c1: ChainFile
     c2: ChainFile
-
 
     @override
     def map_splice_site(self, ss: SpliceSite) -> SpliceSite | None:

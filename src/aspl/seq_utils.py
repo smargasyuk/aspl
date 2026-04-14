@@ -6,10 +6,9 @@ from .events import (
     Strand,
     SpliceSite,
     IntervalCoordinate,
-    Exon
+    Exon,
 )
 from .transcripts import Transcript
-
 
 COMPLEMENT = {"A": "T", "G": "C", "C": "G", "T": "A", "N": "N"}
 
@@ -68,19 +67,21 @@ def _lower_first_and_last(s):
         return s
     if len(s) == 1:
         return s.lower()
-    return s[0].lower() + s[1:-1] + s[-1].lower()    
+    return s[0].lower() + s[1:-1] + s[-1].lower()
 
 
 def translate_with_splice_marks(t: Transcript, fa: pysam.FastaFile) -> str:
     """
-    Translates transcript to protein, converting amino acids 
+    Translates transcript to protein, converting amino acids
     at splice junctions to uppercase.
     """
-    translated = ''
-    nt_leftover = ''
+    translated = ""
+    nt_leftover = ""
     for e in t.iter_exons():
         exon_seq = get_sequence(e, fa)
-        exon_translated, nt_leftover = _translate_exon_with_splice_marks(exon_seq, nt_leftover)
+        exon_translated, nt_leftover = _translate_exon_with_splice_marks(
+            exon_seq, nt_leftover
+        )
         translated += exon_translated
     # the first and the last exon boundaries are not splice sites
     translated = _lower_first_and_last(translated)

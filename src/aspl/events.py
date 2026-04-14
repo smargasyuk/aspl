@@ -59,7 +59,7 @@ class SplicingSubPath(ABC):
     @abstractmethod
     def splice_sites(self) -> list[SpliceSite]:
         pass
-    
+
     @classmethod
     def from_splice_sites(cls, splice_sites: list[SpliceSite]) -> Self:
         assert len(splice_sites) == len(cls.splice_site_types)
@@ -77,7 +77,9 @@ class SplicingSubPath(ABC):
             return False
 
         for s1, s2 in zip(self.splice_sites, self.splice_sites[1:]):
-            result &= (((s1.coord <= s2.coord) & (s1.strand == Strand.PLUS)) | ((s1.coord >= s2.coord) & (s1.strand == Strand.MINUS)))
+            result &= ((s1.coord <= s2.coord) & (s1.strand == Strand.PLUS)) | (
+                (s1.coord >= s2.coord) & (s1.strand == Strand.MINUS)
+            )
         return result
 
     def get_sites_sorted_by_coordinate(self):
@@ -124,7 +126,6 @@ class Exon(SplicingSubPath):
     @override
     def splice_sites(self) -> list[SpliceSite]:
         return [self.siteB, self.siteC]
-
 
     def get_interval(self):
         assert self.is_valid()

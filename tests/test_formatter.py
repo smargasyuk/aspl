@@ -41,11 +41,12 @@ def test_ce_site_relation():
         ss1, SpliceSite
     )
 
+
 def test_transcript():
-    t1 = 'chr7_127228465_127228619_127229137_127229217_127229539_127229648_127230120_127230191_127231017_127231142_127231267_127231754_-'
+    t1 = "chr7_127228465_127228619_127229137_127229217_127229539_127229648_127230120_127230191_127231017_127231142_127231267_127231754_-"
     assert t1 == formatter.format(formatter.parse(t1, Transcript))
 
 
 def test_exon():
-    e1 = 'chr7_127228465_127228619_-'
+    e1 = "chr7_127228465_127228619_-"
     assert e1 == formatter.format(formatter.parse(e1, Exon))
