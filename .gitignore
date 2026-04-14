@@ -1,4 +1,7 @@
-<<<<<<< HEAD
+# Fasta index for a test file
+*.fai
+*.gzi
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -206,15 +209,3 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
-=======
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
->>>>>>> dc345e6 (initial commit. Add definitions for events, parsing/formatting and mapping with dictionary)

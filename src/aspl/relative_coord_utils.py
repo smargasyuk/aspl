@@ -1,5 +1,4 @@
 from typing import Callable
-from polars.datatypes.classes import R
 from .events import IntervalCoordinate, Strand
 import numpy as np
 
@@ -76,5 +75,5 @@ def lift_coordinates_to_gapped_alignment(
     ali_seq: str, rel_coords: RelativeCoordinates
 ) -> RelativeCoordinates:
     # non-zero positions in the seq1 gapped alignment; ali_seq[seq_mapping[i]] equals seq[i]
-    seq_mapping = np.where(np.array(list(seq1_ali)) != "-")[0]
+    seq_mapping = np.where(np.array(list(ali_seq)) != "-")[0]
     return seq_mapping[rel_coords[0]], seq_mapping[rel_coords[1]]
