@@ -48,7 +48,19 @@ def get_sequence(el: SpliceJunction | Exon, fa: pysam.FastaFile):
     return get_interval_sequence(el.get_interval(), fa)
 
 
-def _translate_exon_with_splice_marks(seq: str, leftover: str) -> (str, str):
+def _upper_w_star(char: str):
+    if char == "*":
+        return "#"
+    return char.upper()
+
+
+def _lower_w_star(char: str):
+    if char == "#":
+        return "*"
+    return char.lower()
+
+
+def _translate_exon_with_splice_marks(seq: str, leftover: str) -> tuple[str, str]:
     if leftover:
         seq = leftover + seq
     last_coding = len(seq) // 3 * 3
@@ -56,9 +68,9 @@ def _translate_exon_with_splice_marks(seq: str, leftover: str) -> (str, str):
     new_leftover = seq[last_coding:]
     if not p1:
         return p1, new_leftover
-    p1 = p1[0].upper() + p1[1:]
+    p1 = _upper_w_star(p1[0]) + p1[1:]
     if last_coding == len(seq):
-        return p1[:-1] + p1[-1:].upper(), ""
+        return p1[:-1] + _upper_w_star(p1[-1:]), ""
     return p1, new_leftover
 
 
@@ -66,8 +78,8 @@ def _lower_first_and_last(s):
     if not s:
         return s
     if len(s) == 1:
-        return s.lower()
-    return s[0].lower() + s[1:-1] + s[-1].lower()
+        return _lower_w_star(s)
+    return _lower_w_star(s[0]) + s[1:-1] + _lower_w_star(s[-1])
 
 
 def translate_with_splice_marks(t: Transcript, fa: pysam.FastaFile) -> str:
@@ -90,7 +102,7 @@ def translate_with_splice_marks(t: Transcript, fa: pysam.FastaFile) -> str:
 
 def _last_uppercase(s):
     for i in range(len(s) - 1, -1, -1):
-        if s[i].isupper():
+        if s[i].isupper() | (s[i] == "#"):
             return i
     return None
 
@@ -102,4 +114,4 @@ def is_poison_by_50nt(translation_with_splice_marks: str):
     last_splice_position = _last_uppercase(translation_with_splice_marks)
     if last_splice_position is None:
         return False
-    return last_splice_position - end_position - 1 > 17
+    return last_splice_position - end_position - 1 >= 17
